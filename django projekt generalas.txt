@@ -1,0 +1,263 @@
+django projekt generalas:
+
+	1.) virtualis kornyezet(venv)
+		py -m venv venv 
+	
+	2.) belepes a venv be:
+		venv\scripts\activate
+	
+	3.) Django telepites:	
+		pip install Django
+	
+	4.) projekt letrehozasa: 
+		django-admin startproject nev
+
+	5.)belepes a letrehozott projekt mappaba
+		cd mappa_nev
+
+	6.) app letrehozasa:
+		django-admin startapp valami_nev
+
+
+Modell letrehozas:
+
+	//a settings.py ba az INSTALLED_APPS tomben meg kell adni az app nevet ""-be
+	//a project nevevel megegyezo mappaba  az "urls.py"-ba be kell importalni: from django.urls import path, include es az urlpatterns tombbe csinalunk 		egy : path("", include("app_neve.urls"))
+
+	a models.py ba letrehozzuk a class-okat:
+
+		importok:  from django.db import models
+
+		class Nev (models.Model):
+			// ha automatikusan akarjuk novelni az azonositot akkor Autofield-et hasznalj
+			azonosito = models.IntegerField(primary_key = True, verbose_name = 'Azonosító') 
+			szoveg = models.CharField(max_length = 20, verbose_name = 'Szöveg')
+			szam = models.IntegerField(verbose_name = 'Szám')
+		
+			def __str__(self):
+				return self.szoveg
+
+			
+			// mivel a Django-ban nincs osszetett kulcs, ezert megszoritassal oldjuk meg
+
+			class Meta:
+				constraints = [models.UniqueConstraint(fields = (szoveg, szam), name = "unique_szoveg_szam")] 
+
+// ha kell a modellbe valasztasi mezo akkor ezt kell letrehozni az import ala es a choices parametert ezzel kell egyenlove tenni
+
+STATUS_CHOICES = (
+    ("Jóvahagyásra vár", "Jóvahagyásra vár"),
+    ("Jóváhagyott", "Jóváhagyott")
+)
+	
+
+
+	ezek utan migralas
+		py manage.py makemigrations
+		py manage.py migrate
+
+
+		opcionalis ha kell teszt adat:
+
+		// ha fel kell tolteni az egyik tablat adatokkal alapbol, akkor ures migracios file-t hozunk neki letre
+
+		py manage.py makemigrations --empty app_neve --name a_migraciosfile_neve
+
+		//ezek utan belelepunk
+
+		migracios osztalyon kivul letrehozunk egy metodust:
+
+		def valami(apps, schema_editor):
+			//megcsinaljuk a metoduson belul lekerjuk a modellt
+
+			Modell_neve = apps.get_model("app_neve", "modell_neve")
+		
+			kategoriak = ['Ház', 'Lakás', 'Építési telek', 'Garázs', 'Mezőgazdasági terület', 'Ipari ingatlan']
+
+    			for i in range(len(kategoriak)):
+        			k = Kategoria(i + 1, kategoriak[i])
+        			k.save()
+
+		// a migration osztalyon belul van egy operations nevu tomb []-be
+			migrations.RunPython(valami)
+
+		// ha ez kesz
+        		py manage.py migrate
+
+
+formok letrehozasa:
+
+	(manualisan) letrehozzuk a forms.py 
+	
+	importok:
+		from django import forms
+		from django.forms import ModelForm, ValidationError
+		from django.utils import timezone
+		from .models import *
+
+	class ValamiForm(ModelForm):
+		class Meta: 	
+			model = Modell_neve
+			fields = "__all__" vagy ["", ""]-be 
+			
+			//ha a fields erteke all
+				exclude = ["", ""]
+				// amit ide beirunk az nem jelenik meg a formon
+			widgets = {
+				"szoveg" : forms.TextInput(attrs = {"class" : "form-control"}),
+				"szam" : forms.NumberInput(attrs = {"class" : "form-control"}) 
+				//ha van datum
+					"datum" : forms.DateInput(format = "%Y-%m-%d", attrs = {"class" = "form-control", "type" = "date"})
+			}
+
+		// ezek a clean metodusok csak ellenorzesre szolgalnak
+		def clean_szoveg(self):
+			super().clean()
+			// ami a modell adattag neve kell a zarojelbe es azt erdemes nevnek is adni
+			szoveg = self.cleaned_data.get("szoveg", None)
+			if(szoveg is None):
+				raise ValidationError("a szoveg mezo nem lehet ures")
+			return szoveg
+
+
+
+		def clean_datum(self):
+			super().clean()
+
+			// ami a modell adattag neve kell a zarojelbe es azt erdemes nevnek is adni
+			datum = self.cleaned_data.get("datum", None)
+			if(datum is None):
+				datum = timezone.now().date()
+			return datum
+
+
+
+
+view letrehozas:
+	
+	importok:
+		from django.shortcuts import render, redirect, get_object_or_404
+
+		// csak ellenorzesnek jo mert majd inkabb a render, redirect lesz
+		from django.http import HttpResponse 
+		
+		//csak a lekerdezesekhez kell
+		from django.db.models import Q
+
+		from .models import *
+		from .forms import *
+		from .filters import *
+
+	szintaktika:
+		
+		def index(request):
+    			modellvaltozo = Modell_nev.objects.all()
+			filter = ValamiFilter(request.GET, queryset = modellvaltozo)
+    			context = {
+        			'modellvaltozo': modellvaltozo,
+				'filter' : filter
+    				}
+
+    			return render(request, 'index.html', context = context)
+		
+		def post(request):
+
+			// a formod neve kell
+			form = ValamiForm(request.POST or None)
+			if(request.method == "POST"):
+				if(form.is_valid()):
+					form.save()
+					return redirect(index)
+			else:
+				form = ValamiForm()
+
+			context = {
+				"form" : form
+				}
+			
+			//html legeneralasa a templates mappaba amit nekunk kell legeneralni
+			return render( request, "html_neve", context = context)
+
+
+		def put(request, id):
+			modeldata = get_object_or_404(Modell_neve, pk = id)
+			form = ValamiForm(request.POST or None, instance = modelldata)
+			if(request.method == "POST"):
+				if(form.is_valid())
+					form.save()
+					return redirect(index)
+			else:
+				form = ValamiForm()
+
+			context = {
+				"form" : form
+				}
+			
+			return render( request, "html_neve", context = context)
+
+
+
+
+		def delete(request, id):
+			modeldata = get_object_or_404(Modell_neve, pk = id)
+			modeldata.delete()
+			return redirect(index)
+
+urls letrehozasa
+
+	letrehozzuk az urls.py-t
+	importok: 
+		from django.urls import path
+		from . import views
+
+	urlpatterns = [
+		path("eleresi utvonal", views.view_neve, name = "html_hivatkozas_nev_ami_leirja_hogy_mit_csinal")
+	]
+
+
+
+ha szukseges akkor Filter letrehozasa
+
+	a cmd-be be kell irni hogy:
+		pip install django-filter
+
+	letrehozzuk a filters.py-t
+
+	a filters.py-on belul iportok:
+		import django_filters
+		from .models import *
+		from django.forms import * 
+
+	ezek utan:
+
+		class ValamiFilter(django_filters.FilterSet):
+			szoveg = django_filters.CharFilter(
+				label = "szoveg",
+				field = "szoveg",
+				lookup_expr = "icontains",
+				widget = TextInput(attrs = {"class" : "form-control", "type" = "text"})
+			)
+			szam = django_filters.NumberFilter(
+				label = "szam",
+				field = "szam",
+				lookup_expr = "iexact",
+				widget = TextInput(attrs = {"class" : "form-control", "type" = "number"})
+			)
+			
+			class Meta:
+				model = Modell_neve
+				fields = [__all__ vagy felsorolva]
+				exclude = ["", ""]
+
+
+
+
+
+
+
+
+
+
+
+
+			
